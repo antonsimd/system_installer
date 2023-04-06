@@ -1,0 +1,4 @@
+---
+base_path: /tmp/eztransfer # path of where the installation is going to
+proxy: http://172.10.0.254:3128 # 3128 is the default proxy port
+bridge_name: test_bridge 

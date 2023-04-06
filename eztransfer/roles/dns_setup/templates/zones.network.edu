@@ -1,0 +1,17 @@
+$ORIGIN network.edu.
+$TTL 86400
+@       IN      SOA     dns1.network.edu.       hostmaster.network.edu. ()
+                        2001062502 ; serial
+                        21600      ; refresh after 6 hours
+                        3600       ; retry after 1 hour
+                        604800     ; expire after 1 week
+                        86400      ; minimum TTL of 1 day
+)
+
+        IN      NS      dns1.network.edu.
+
+dns1    IN      A       192.168.122.102
+
+website1        IN      A       172.10.0.50
+
+website2        IN      A       172.10.0.52

@@ -1,0 +1,41 @@
+all:
+  hosts:
+    dhcp1: # name of the virtual machine
+      ansible_host: 172.10.0.1 # ip address of the stated machine (static)
+      mac_address: 52:54:00:da:b0:21 # mac address of the stated machine (hard coded for vms, set for physical)
+      ram: 3000 # amount of ram allocated to the vm
+      cpu: 2 # amount of cores allocated to the vm
+      disk_size: 10 # size of the virtual hard drive allocated to the vm in gigabytes
+      vm_type: dhcp # type of the virtual machine (dhcp, dns, website or load balancer)
+#    dns1:
+#      ansible_host: 192.168.122.102
+#      mac_address: 52:54:00:ba:dc:c0    
+#      ram: 2000
+#      cpu: 3
+#      disk_size: 10
+#      vm_type: dns
+    haproxy:
+      ansible_host: 172.10.0.50
+      mac_address: 52:54:00:b7:17:1f
+      ram: 2000
+      cpu: 2
+      disk_size: 10
+      vm_type: load_balancer
+    website1:
+      ansible_host: 172.10.0.51
+      mac_address: 52:54:00:06:f9:6c
+      ram: 2000
+      cpu: 2
+      disk_size: 20
+      vm_type: website
+    website2:
+      ansible_host: 172.10.0.52
+      mac_address: 52:54:00:ad:c7:7f
+      ram: 2000
+      cpu: 2
+      disk_size: 20
+      vm_type: website
+#    test:
+#      ansible_host: 192.168.122.148
+#      mac_address: 52:54:00:22:2c:2e
+

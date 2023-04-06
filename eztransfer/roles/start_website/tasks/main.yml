@@ -1,0 +1,10 @@
+---
+- name: Start docker container with website
+  become: yes
+  docker_container:
+    name: website1
+    state: started
+    image: nginx
+    pull: yes
+    ports:
+    - 80:80

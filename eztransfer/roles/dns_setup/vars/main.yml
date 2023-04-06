@@ -1,0 +1,3 @@
+---
+configuration_path: /mnt/bind9/etc/bind/
+zone_path: /mnt/bind9/var/lib/bind/

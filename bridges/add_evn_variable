@@ -1,0 +1,4 @@
+http_proxy="http://158.0.0.1:3128"
+https_proxy="http://158.0.0.1:3128"
+
+# add to /etc/environment

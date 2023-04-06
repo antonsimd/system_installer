@@ -1,0 +1,37 @@
+---
+- name: Build initial iso files
+  hosts: all
+  gather_facts: no
+  roles:
+  - build_iso
+  - start_vm
+- name: Setup DHCP server
+  hosts: dhcp1
+  gather_facts: no
+  roles:
+  - prepare_run
+  - dhcp_setup
+
+- name: Start website
+  hosts: website1,website2
+  gather_facts: no
+  roles:
+  - prepare_run
+  - docker_install
+  - start_website
+
+#- name: Start DNS
+#  hosts: dns1
+#  gather_facts: no
+#  roles:
+#  - prepare_run
+#  - docker_install
+#  - dns_setup
+
+- name: Start haproxy
+  hosts: haproxy
+  gather_facts: no
+  roles:
+  - prepare_run
+  - docker_install
+  - haproxy_setup

@@ -1,0 +1,19 @@
+---
+- name: Cleanup
+  hosts: localhost
+  tasks:
+  - name: Remove vm directories
+    file:
+      path: /tmp/eztransfer/
+      state: absent
+
+  - name: Remove vms
+    become: yes
+    command:
+      "virsh destroy {{ item }}"
+    with_items:
+    - dhcp1
+    - dns1
+    - haproxy
+    - website1
+    - website2

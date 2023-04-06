@@ -1,0 +1,28 @@
+---
+#- name: Build initial iso files
+#  hosts: localhost
+#  roles:
+#  - build_iso
+
+#- name: Setup DHCP server
+#  hosts: dhcp2
+#  roles:
+#  - dhcp_setup
+
+#- name: Start website
+#  hosts: website1
+#  roles:
+#  - docker_install
+#  - start_website
+
+#- name: Start DNS
+#  hosts: test
+#  roles:
+##  - docker_install
+#  - dns_setup
+
+#- name: Start haproxy
+#  hosts: test
+#  roles:
+#  - docker_install
+#  - haproxy_setup

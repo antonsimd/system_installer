@@ -1,0 +1,79 @@
+---
+- name: Make sure working directories are empty
+  file:
+    state: absent
+    path: "{{ base_path }}/iso/{{ inventory_hostname }}/"
+  delegate_to: localhost
+
+- name: Create directory for ISO setup
+  file:
+    path: "{{ base_path }}/iso/{{ inventory_hostname }}/"
+    state: directory
+    mode: 0755
+  register: working_folder
+  delegate_to: localhost
+
+- name: Create directories for ISO customisation
+  file:
+    path: "{{ working_folder.path }}/{{ item }}"
+    state: directory
+    mode: 0755
+    recurse: yes
+  with_items:
+  - nocloud
+  - sysconfig
+  delegate_to: localhost
+
+- name: Copy initial ISO
+  command: >-
+    dd if={{ iso_path }}
+    of={{ base_path }}/iso/{{ inventory_hostname }}.iso bs=1M conv=sparse
+  changed_when: true
+  delegate_to: localhost
+
+## build ubuntu iso
+
+- name: Extract grub
+  command: "7z e {{ base_path }}/iso/{{ inventory_hostname }}.iso -o{{ working_folder.path }}/boot/grub boot/grub/grub.cfg"
+  changed_when: true
+  delegate_to: localhost
+
+- name: Populate user-data
+  template:
+    src: "user-data.yml.j2"
+    dest: "{{ working_folder.path }}/nocloud/user-data"
+    mode: 0755
+  delegate_to: localhost
+
+- name: Generate proxy settings
+  copy:
+    content: |
+      http_proxy="{{ proxy }}"
+      https_proxy="{{ proxy }}"
+    dest: "{{ working_folder.path }}/sysconfig/environment"
+    mode: 0755
+  delegate_to: localhost
+
+- name: Patch grub to enable autoinstall
+  replace:
+    path: "{{ working_folder.path }}/boot/grub/grub.cfg"
+    regexp: '---'
+    replace: 'fsck.mode=skip autoinstall ds=nocloud\;s=/cdrom/nocloud/ ---'
+  delegate_to: localhost
+
+- name: Create empty meta-data file
+  copy:
+    content: ""
+    dest: "{{ working_folder.path }}/nocloud/meta-data"
+    mode: 0755
+  delegate_to: localhost
+
+- name: Patch iso with autoinstall and new files
+  command: >
+    xorriso -boot_image "any" "keep" -dev {{ base_path }}/iso/{{ inventory_hostname }}.iso
+    -map {{ working_folder.path }}/nocloud nocloud
+    -map {{ working_folder.path }}/boot/grub/grub.cfg boot/grub/grub.cfg
+    -map {{ working_folder.path }}/sysconfig sysconfig
+    -commit -eject all
+  changed_when: true
+  delegate_to: localhost

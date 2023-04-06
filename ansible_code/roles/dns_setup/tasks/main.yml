@@ -1,0 +1,42 @@
+---
+- name: Create configuration directory
+  become: yes
+  file:
+    path: "{{ configuration_path }}"
+    state: directory
+    mode: 0755
+    recurse: yes
+  
+- name: Create zone directory
+  become: yes
+  file:
+    path: "{{ zone_path }}"
+    state: directory
+    mode: 0755
+    recurse: yes
+
+- name: Copy configuration file
+  become: yes
+  template:
+    src: "named.conf"
+    dest: "{{ configuration_path }}/named.conf"
+    mode: 0755
+
+- name: Copy zone file
+  become: yes
+  template:
+    src: "zones.network.edu"
+    dest: "{{ zone_path }}/zones.network.edu"
+    mode: 0755
+
+- name: Start dns server inside docker container
+  become: yes
+  docker_container:
+    name: bind9
+    state: started
+    image: internetsystemsconsortium/bind9:9.16
+    pull: yes
+    network_mode: host
+    volumes:
+    - "{{ configuration_path }}:/etc/bind/"
+    - "{{ zone_path }}:/var/lib/bind/"

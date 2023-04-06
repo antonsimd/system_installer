@@ -1,0 +1,5 @@
+# create a bridge:
+sudo ip link add name <your name> type bridge
+
+# assign ip
+sudo ip addr add <your ip/scope> dev <name>

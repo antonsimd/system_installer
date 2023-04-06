@@ -1,0 +1,24 @@
+hosall:
+  hosts:
+    dhcp1:
+      ansible_host: 172.10.0.1
+      mac_address: 52:54:00:da:b0:21    
+    dns1:
+      ansible_host: 172.10.0.2
+      mac_address: 52:54:00:ba:dc:c0    
+    haproxy:
+      ansible_host: 172.10.0.50
+      mac_address: 52:54:00:b7:17:1f
+    website1:
+      ansible_host: 172.10.0.51
+      mac_address: 52:54:00:06:f9:6c
+    website2:
+      ansible_host: 172.10.0.52
+      mac_address: 52:54:00:ad:c7:7f
+    dhcp2:
+      ansible_host: 172.10.0.100
+      mac_address: 52:54:00:d9:19:e3
+    test:
+      ansible_host: 172.10.0.4
+      mac_address: 52:54:00:99:13:26
+      

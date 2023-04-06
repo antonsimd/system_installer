@@ -1,0 +1,25 @@
+---
+- name: Create directory for configuration files
+  file:
+    path: "{{ config_path }}"
+    state: directory
+    mode: 0755
+    recurse: yes
+
+- name: Copy configuration file
+  template:
+    src: haproxy.cfg
+    dest: "{{ config_path }}/haproxy.cfg"
+    mode: 0755
+
+- name: Start docker container
+  become: yes
+  docker_container:
+    name: haproxy
+    state: started
+    image: haproxy
+    pull: yes
+    ports:
+    - "80:80"
+    volumes:
+    - "{{ config_path }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg"

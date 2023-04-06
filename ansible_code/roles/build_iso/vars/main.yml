@@ -1,0 +1,6 @@
+---
+base_path: /home/tony/virtual_machines/eztransfer/
+hostname: test
+iso_path: /home/tony/virtual_machines/iso_images/ubuntu-20.04.3-live-server-amd64.iso
+iso: ubuntu
+user_data: /home/tony/virtual_machines/eztransfer/user-data.yml

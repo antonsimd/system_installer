@@ -1,0 +1,33 @@
+---
+- name: Create vms directory if it does not exist
+  file:
+    path: "{{ base_path }}/vms/{{ inventory_hostname }}"
+    state: directory
+    recurse: yes
+    mode: 0777
+  become: true
+  delegate_to: localhost
+
+- name: Create disk for vm
+  command: qemu-img create -f qcow2 {{ base_path }}/vms/{{ inventory_hostname }}.qcow2 {{ disk_size }}G
+  delegate_to: localhost
+  become: yes
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  throttle: 1
+
+- name: "Generate vm xml file"
+  template:
+    src: "vm.xml.j2"
+    dest: "{{ base_path }}/vms/{{ inventory_hostname }}/{{ inventory_hostname }}.xml"
+    mode: 0755
+  delegate_to: localhost
+
+- name: "Start nodes"
+  command: >-
+    virsh create {{ base_path }}/vms/{{ inventory_hostname }}/{{ inventory_hostname }}.xml
+  delegate_to: localhost
+  become: yes
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  throttle: 1

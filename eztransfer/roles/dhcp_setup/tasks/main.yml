@@ -1,0 +1,20 @@
+---
+- name: Install DHCP server
+  become: yes
+  apt:
+    state: present
+    name:
+    - isc-dhcp-server
+
+- name: Copy dhcpd.conf file
+  become: yes
+  template:
+    src: "dhcpd.conf.j2"
+    dest: "/etc/dhcp/dhcpd.conf"
+    mode: 0755
+
+- name: Restart DHCP server
+  become: yes
+  systemd:
+    name: isc-dhcp-server
+    state: restarted

@@ -1,0 +1,46 @@
+---
+- name: APT key for docker packages
+  become: yes
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: APT repository for docker images
+  become: yes
+  apt_repository: 
+    repo: >-
+      deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable
+    state: present
+    update_cache: yes
+  register: repo
+
+- name: Install docker 
+  become: yes  
+  apt:
+    update_cache: yes
+    name:
+    - docker-ce
+    - python3-docker
+    state: present
+
+- name: Create directory for proxy file
+  become: yes  
+  file:
+    path: "/etc/systemd/system/docker.service.d/"
+    state: directory
+    mode: 0744
+
+- name: Copy proxy configuration file
+  become: yes
+  template:
+    src: "http-proxy.conf"
+    dest: "/etc/systemd/system/docker.service.d/http-proxy.conf"
+    mode: 0744
+
+- name: Restart docker 
+  become: yes
+  systemd:
+    daemon_reexec: yes
+    daemon_reload: yes
+    name: docker
+    state: restarted

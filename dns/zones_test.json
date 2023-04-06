@@ -1,0 +1,44 @@
+$ORIGIN network.edu.
+$TTL 86400
+@	SOA	server1.network.edu.	hostmaster.network.edu. (
+		2001062501 ; serial
+		21600      ; refresh after 6 hours
+		3600       ; retry after 1 hour
+		604800     ; expire after 1 week
+		86400 )    ; minimum TTL of 1 day
+;
+;
+
+@ IN    NS	server1.network.edu.
+
+website1	IN A	127.0.0.1
+
+options {
+	directory "/var/cache/bind"; #TODO: map cache from host machine
+	
+	recursion yes; # enables recursion
+	listen-on { 127.0.0.1; };
+	listen-on-v6 { any; };
+	listen-on port 53 { 127.0.0.1; };
+	dnssec-validation
+	allow-recursion {
+			none;
+	};
+	allow-transfer {
+		   none;
+   };
+	allow-update {
+			none;
+	};
+
+forwarders {
+	0.0.0.0; # Google
+};
+
+};
+
+zone "network.edu." {
+	type master;
+	file "/var/lib/bind/zones.network.edu";
+	notify explicit;
+};

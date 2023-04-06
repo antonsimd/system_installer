@@ -1,0 +1,23 @@
+#cloud-config
+autoinstall:
+  version: 1
+  network:
+    network:
+      version: 2
+      ethernets:
+        ens3:
+          dhcp4: no
+          addresses: [172.10.0.100/24]
+  proxy: http://172.10.0.254:3128/
+  identity:
+    hostname: dhcp
+    password: $6$UC5fV9nntT417o.f$6UeAd90FJRSGtZ2DE1P52mwwSySaC2xaJiGFOwXQxLpjqEjBk9chlEpNW7Cu0bY.I9rqMMP08tKFr.hntjk3U1
+    username: tony
+  ssh:
+    install-server: yes
+    authorized-keys: 
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC5//A39MbogJLnx5Y9BDxkf5+YzfjSwpOH9rnsoyA6k/yh221qewKVO1jgVY3DOP6zIX3PtevCuQ0iOHiIceUoSo2Wj7CDPjzkDk7bKFfPGKyqAG9zJcnq9WPa5EM9O05/8uJJI8wXVkxAFsjrQmXhALJ82ILmip1urI02jvlO+YGS3qEusdgeoaPgrboe1rBN1dkZWnqDCaJIr5WBhT3fCW7p87mLyHdvcNRLKFJrAFT4FKXMjOhzwwi8m6vQM3BitgtiYoLRpbBK/jMtf4Rhp3D+b0TbbfF/xVbKiTDwE+w1IuFQuD7dRSB11lEwA/AKsiU3A8QvabUA+r9AQ/62VebERyA6Xi3oQDGG+P41kNOrX+Sl/bEDLQqsG2WwBKBSaiuTt1RiBOc2xfamfIcfmWqSauFQzhlaofBPd7tY161K39BIRBMzNKGBz55rGWVmfXwc0RejquuYnEkskuKj6x+B2Yh0kWjDmebbP4pxvFFhi04vhEwe/x/Cy7okZTs= tony@tony-desktop
+    allow-pw: no
+  late-commands:
+    - chroot /target /bin/bash -c "echo 'dante ALL=(ALL:ALL) NOPASSWD:ALL' | tee /etc/sudoers.d/dante"
+    - chroot /target /bin/bash -c "chmod 0440 /etc/sudoers.d/dante"

@@ -1,0 +1,28 @@
+#for host/bridge
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+    wlp5s0:
+      dhcp4: yes
+      dhcp6: yes
+  bridges:
+    test_bridge:
+      interfaces: [wlp5s0]
+      dhcp4: no
+      dhcp6: no
+      addresses: [158.0.0.1/24]
+      nameservers:
+        addresses: [8.8.8.8,8.8.4.4]
+
+# for machine within the private network
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp1s0:
+      dhcp4: no
+      addresses: [158.0.0.250/24]
+      gateway4: 152.0.0.1
+      nameservers:
+        addresses: [8.8.8.8,8.8.4.4]

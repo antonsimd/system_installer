@@ -1,0 +1,15 @@
+default-lease-time 600;
+max-lease-time 7200;
+authoritative;
+
+subnet 172.10.0.0 netmask 255.255.255.0 {
+  range 172.10.0.1 172.10.0.254;
+  option routers 172.10.0.1;
+}
+
+{% for host in groups["all"] %}
+host {{ host }} {
+hardware ethernet {{ hostvars[host].mac_address }};
+fixed-address {{ hostvars[host].ansible_host }};
+}
+{% endfor %}
