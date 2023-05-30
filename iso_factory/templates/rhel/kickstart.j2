@@ -1,0 +1,262 @@
+
+lang en_US
+keyboard us
+
+# TODO: change the hardcode timezone.
+timezone Australia/Sydney --isUtc
+
+# password is 'dante' - required for first install
+rootpw $2b$10$2j..r7J6DNXrp/0OYSm6pOVHSToBcKYM.HMmsGjI/58tSg/2gZg4G --iscrypted
+
+# create user 'dante' with password 'redhat'
+user --name dante --shell=/bin/bash --homedir=/home/dante --iscrypted --password=$6$slXiZk515EtMfiDr$Ov3AC1T78aWS2u5vvF7T5FzTl6RScdo0pYR4LOmz.h6jWFGs8xPtq2.1uU3evb.W/JxhQ/q4CTj229kyvFKW51
+
+# reboot is used to reboot the Linux after installation, to avoid pressing enter manually.
+reboot
+text
+cdrom
+bootloader --append="crashkernel=auto" --location=mbr
+zerombr
+
+network --hostname={{ inventory_hostname }}
+
+# Setup the partitions.
+
+%include /tmp/partition_layout
+
+%pre --interpreter=/bin/bash --erroronfail
+
+# func_getDeviceName: Get device name.
+# Input (read from env): modelValue, serialValue, sizeValue
+# Output (set to env): deviceName
+func_getDeviceName() {
+
+    deviceName=""
+
+    while read -r line
+    do
+        if [[ $line =~ "disk" ]]; then
+            pattern='([a-zA-Z0-9]+)[[:blank:]]+([0-9]+)'
+            [[ $line =~ $pattern ]]
+            name=${BASH_REMATCH[1]}
+            size=$((BASH_REMATCH[2]/1024/1024))
+
+            if [[ "$size" -lt 200 ]]; then
+                continue
+            fi
+            if [[ -n "$modelValue" ]] && ! udevadm info -q property -n "$name" | grep -i "$modelValue"; then
+                continue
+            fi
+            if [[ -n "$serialValue" ]] && ! udevadm info -q property -n "$name" | grep -i "$serialValue"; then
+                continue
+            fi
+            if [[ -z "$sizeValue" ]]; then
+                deviceName=$name
+            elif [[ "$sizeValue" == "largest" ]]; then
+                deviceName=$name
+            elif [[ "$sizeValue" == "smallest" ]] && [[ -z "$deviceName" ]]; then
+                deviceName=$name
+            fi
+        fi
+    done < <(lsblk -dnbl -x SIZE -o NAME,SIZE,TYPE)
+}
+
+{% if virgil_storage_os_rhel %}
+
+    {% for block in virgil_storage_os_rhel %}
+
+deviceName=""
+        {# Get the disk selectors from inventory file, and save them to kickstart file. #}
+        {# While kickstarting RHEL, the bash script will run to get device name in target system. #}
+        {% if block.disk_selectors %}
+modelValue=""
+serialValue=""
+sizeValue=""
+            {% for key, value in block.disk_selectors.items() %}
+                {% if key == "model" %}
+modelValue="{{ "id_model=%s" % value }}"
+                {% elif key == "serial" %}
+serialValue={{ "id_serial=%s" % value }}
+                {% elif key == "size" and value in ["smallest", "largest"] %}
+sizeValue={{ value }}
+                {% else %}
+                    {{ ('' if false) | mandatory('Unknown disk_selectors: ' + key) }}
+                {% endif %}
+            {% endfor %}
+
+func_getDeviceName
+
+if [[ -z "$deviceName" ]]; then
+    exit
+fi
+
+if [[ -z "$initDevices" ]]; then
+    initDevices="$deviceName"
+else
+    initDevices="$initDevices,$deviceName"
+fi
+        {% endif %}
+
+        {% set mntFsType = '--fstype=%s' % block.fs_type if block.fs_type else '' %}
+        {% set mntBoot = '--asprimary' if block.boot == true else '' %}
+        {% set mntVgname = '--vgname=%s' % block.vol_group if block.vol_group else '' %}
+
+        {% if block.command == 'logvol' %}
+            {% set mntName = '--name=%s' % block.name %}
+        {% else %}
+            {% set mntName = '' %}
+        {% endif %}
+
+        {% if block.command == 'volgroup' %}
+            {% set mntSize = '' %}
+        {% elif block.grow %}
+            {% set mntSize = '--size=1 --grow' %}
+        {% else %}
+            {% set mntSize = '--size=%d' % block.size_mi %}
+        {% endif %}
+
+        {% if block.enc_kind == 'luks' %}
+            {% set mntEncrypt = '--encrypted --luks-version=luks2 --passphrase=%s' % block.enc_key | default(virgil_hostname, true) %}
+        {% else %}
+            {% set mntEncrypt = '' %}
+        {% endif %}
+
+        {% if block.vol_names %}
+            {% set nsVol = namespace(volumes = '') %}
+            {% for vol in block.vol_names %}
+                {% set nsVol.volumes = nsVol.volumes + ' ' + vol %}
+            {% endfor %}
+            {% set mntVolNames = nsVol.volumes %}
+        {% else %}
+            {% set mntVolNames = '' %}
+        {% endif %}
+
+        {% set mntCommon = '%s %s %s %s %s %s %s' % (mntFsType, mntSize, mntBoot, mntName, mntVgname, mntVolNames, mntEncrypt) %}
+
+if [[ -z "$deviceName" ]]; then
+    echo "{{ block.command }} {{ block.mount_point}} {{ mntCommon }}" >> /tmp/partition_layout
+else
+    echo "{{ block.command }} {{ block.mount_point}} --ondisk=$deviceName {{ mntCommon }}" >> /tmp/partition_layout
+fi
+    {% endfor %}
+    echo "clearpart --all --initlabel --drives=$initDevices" >> /tmp/partition_layout
+
+{% else %}
+
+    echo "clearpart --all --initlabel" >> /tmp/partition_layout
+    echo "autopart" >> /tmp/partition_layout
+
+{% endif %}
+
+%end
+
+auth --passalgo=sha512 --useshadow
+selinux --disabled
+firewall --disabled
+skipx
+firstboot --disable
+
+%post --nochroot --erroronfail
+# Copy network files
+cp -f /mnt/install/repo/sysconfig/network-scripts/* /mnt/sysimage/etc/sysconfig/network-scripts/
+cp -f /mnt/install/repo/sysconfig/network /mnt/sysimage/etc/sysconfig/
+cp -f /mnt/install/repo/sysconfig/daemons /mnt/sysimage/etc/frr/
+cp -f /mnt/install/repo/sysconfig/frr.conf /mnt/sysimage/etc/frr/
+cp -f /mnt/install/repo/sysconfig/vtysh.conf /mnt/sysimage/etc/frr/
+chmod 640 /mnt/sysimage/etc/frr/*
+
+# Copy drivers
+mkdir -p /mnt/sysimage/opt/install/drivers/mellanox
+cp -f /mnt/install/repo/drivers/* /mnt/sysimage/opt/install/drivers/
+tar -xf /mnt/sysimage/opt/install/drivers/mellanox_rhel.tgz --strip-components=2 -C /mnt/sysimage/opt/install/drivers/mellanox
+chroot /mnt/sysimage/ /bin/bash -c "/opt/install/drivers/mellanox/install --force --vma > /tmp/mellanox.log 2>&1"
+
+# Delete default udev rules and inject rules from virgil
+rm -rf /mnt/sysimage/etc/udev/rules.d/*
+cp -f /mnt/install/repo/sysconfig/70-persistent-net.rules /mnt/sysimage/etc/udev/rules.d/
+
+{% if simulation %}
+{# Inject proxy setting for the simulation #}
+cp -f /mnt/install/repo/sysconfig/environment /mnt/sysimage/etc/
+{% endif %}
+
+%end
+
+%post --erroronfail
+
+# Config network setting for frr
+sed -i 's/bgpd=no/bgpd=yes/' /etc/frr/daemons
+
+systemctl disable NetworkManager.service
+systemctl enable network.service
+systemctl enable frr.service
+chkconfig network on
+
+# Import authorized_keys
+mkdir /home/dante/.ssh
+chown dante:dante /home/dante/.ssh
+cat > /home/dante/.ssh/authorized_keys << EOF
+"{{ virgil_ssh_authorized_keys }}"
+EOF
+chown dante:dante /home/dante/.ssh/authorized_keys
+chmod 644 /home/dante/.ssh/authorized_keys
+
+echo "dante ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers.d/dante
+chmod 440 /etc/sudoers.d/dante
+
+# Call Styx at first boot time
+{% if not simulation %}
+cat > /home/dante/callstyx << EOF
+
+#!/bin/bash
+echo "\`date\`: Calling Styx for Dante run" >> /tmp/styx.log
+curl -f --retry 999 -H "Content-Type: application/json" -d '"First Boot Server Dante Run"' {{ styx_url }} >> /tmp/styx.log 2>&1 &
+sed -i '/callstyx/d' /etc/rc.d/rc.local
+rm /home/dante/callstyx
+
+EOF
+
+chown dante:dante /home/dante/callstyx
+chmod +x /home/dante/callstyx
+echo "/home/dante/callstyx" >> /etc/rc.d/rc.local
+chmod 744 /etc/rc.d/rc.local
+{% endif %}
+
+# Mount luks devices automatically
+runDracut=0
+{% if virgil_storage_mount_rhel is defined and virgil_storage_mount_rhel %}
+    {% for block in virgil_storage_mount_rhel %}
+        {% set luks_key = block.enc_key | default(virgil_hostname, true) %}
+luksPass={{ luks_key }}
+vgName=$(basename $(findmnt -nmo SOURCE "{{ block.mount_point }}"))
+luksName=$(lsblk -isno NAME | grep -A 1 $vgName | tail -n 1 | sed 's/\s*`-//')
+devPath=$(lsblk -ispno NAME | grep -A 1 $luksName | tail -n 1 | sed 's/\s*`-//')
+
+        {% if block.enc_unlock_method == 'key file' %}
+devFile=$(basename "$devPath")
+keyFile="/root/random_key_$devFile"
+dd if=/dev/urandom bs=32 count=64 of="$keyFile"
+echo "$luksPass" | cryptsetup luksAddKey "$devPath" "$keyFile"
+sed -i "/$luksName/s/none/\/root\/random_key_$devFile/" /etc/crypttab
+        {% else %}
+echo "$luksPass" | clevis luks bind -d "$devPath" tpm2 '{}'
+runDracut=1
+        {% endif %}
+
+    {% endfor %}
+{% endif %}
+
+if [ "$runDracut" -ne 0 ]; then
+    systemctl enable clevis-luks-askpass.path
+    dracut -f --regenerate-all
+fi
+
+%end
+
+%packages
+@base
+@core
+{% for item in iso_packages %}
+{{ item }}
+{% endfor %}
+%end

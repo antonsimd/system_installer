@@ -1,0 +1,11 @@
+---
+subnet_size: "12"
+vlan_subnet_size: "24"
+nic_team_name: "bond"
+win_password: SampleP@ssw0rd
+win_timezone: AUS Eastern Standard Time
+win_username: Administrator
+win_spice_filename: spice-guest-tools-latest.exe
+red_hat_cert_filename: red_hat.cer
+screen_width: 2560
+screen_height: 1600

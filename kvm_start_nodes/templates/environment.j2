@@ -1,0 +1,7 @@
+{% if 'mgmt' in virgil_groups %}
+http_proxy="{{ simulation_proxy }}"
+https_proxy="{{ simulation_proxy }}"
+{% else %}
+http_proxy="http://{{ virgil_mgmt_nodes | map(attribute='ip_oob_dante') | first }}:3128"
+https_proxy="http://{{ virgil_mgmt_nodes | map(attribute='ip_oob_dante') | first }}:3128"
+{% endif %}

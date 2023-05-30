@@ -1,0 +1,1 @@
+docker run --name haproxy -d -p 80:80 -v /home/tony/haproxy:/usr/local/etc/haproxy haproxy

@@ -1,0 +1,6 @@
+useradd {{ simulation_user }} --create-home
+echo "{{ simulation_user }} ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers.d/{{ simulation_user }}
+mkdir /home/{{ simulation_user }}/.ssh
+chown {{ simulation_user }}:{{ simulation_user }} /home/{{ simulation_user }}/.ssh
+echo "{{ virgil_ssh_authorized_keys }}" >> /home/{{ simulation_user }}/.ssh/authorized_keys
+chown {{ simulation_user }}:{{ simulation_user }} /home/{{ simulation_user }}/.ssh/authorized_keys

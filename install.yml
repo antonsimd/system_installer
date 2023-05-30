@@ -1,0 +1,36 @@
+---
+# This install.yml task list is included from the system_repos_packages role in
+# order to install all required apt packages at once.
+
+# TODO: In v2.9.13 apt_key doesn't support proxies defined in /etc/apt/apt.conf.d
+# Not an issue in this file since it is used on management nodes which
+# are not using proxies (in production) or using them system wide
+# in /etc/environment
+- name: APT key for docker packages
+  when: ansible_facts['os_family'] == "Debian"
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  become: yes
+
+- name: APT repo for docker packages
+  when: ansible_facts['os_family'] == "Debian"
+  apt_repository:
+    repo: >-
+        deb [arch=amd64] {{ apt_mirror | default("https:/", true) }}/download.docker.com/linux/ubuntu bionic stable
+    state: present
+    update_cache: no
+  register: repo
+  become: yes
+
+- name: Install docker-ce, python3-docker (Debian/Ubuntu)
+  when: ansible_facts['os_family'] == "Debian"
+  set_fact:
+    apt_packages: "{{ apt_packages + ['docker-ce', 'python3-docker'] }}"
+    apt_update: "{{ apt_update or repo is changed }}"
+
+- name: Install podman for Red Hat
+  when: ansible_facts['os_family'] == "RedHat" and ansible_distribution_major_version == '8'
+  set_fact:
+    yum_packages: "{{ yum_packages + ['@container-tools'] }}"
+    yum_repos: "{{ yum_repos + ['container-tools'] }}"

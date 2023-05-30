@@ -1,0 +1,75 @@
+{% if simulation %}
+{%   if links_ports is defined %}
+$proxy_ip = "{{ virgil_mgmt_nodes | map(attribute='ip_primary') | first }}:{{ simulation_proxy_port }}"
+{%   else %}
+$proxy_ip = "{{ simulation_proxy_ip }}:{{ simulation_proxy_port }}"
+{%   endif %}
+
+Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -name ProxyServer -Value $proxy_ip
+Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -name ProxyEnable -Value 1
+{% endif %}
+
+# Disable firewall
+netsh advfirewall set allprofiles state off
+
+# Add Red Hat certificate to Local machine store
+certutil -f -addstore "TrustedPublisher" D:\{{ red_hat_cert_filename }}
+
+# Install spice
+Start-Process -Wait -FilePath "D:\{{ win_spice_filename }}" -ArgumentList '/S' -PassThru
+
+{% if links_ports is defined %}
+# If no fabric then no need to create bond
+# Limit network adapters to 1G in simulation
+Set-NetAdapterAdvancedProperty -Name "Ethernet" -DisplayName "Init.ConnectionRate(Mb)" -DisplayValue "1G"
+Set-NetAdapterAdvancedProperty -Name "Ethernet 2" -DisplayName "Init.ConnectionRate(Mb)" -DisplayValue "1G"
+
+# Create NIC Teaming and assign IP address.
+# NIC Teaming over virtio adapters can be done only after installing spice
+# LACP doesn't work with UDP tunnels
+
+New-NetLbfoTeam "{{ nic_team_name }}" -TeamMembers "Ethernet","Ethernet 2" -TeamingMode "Static" -LoadBalancingAlgorithm "Dynamic" -Confirm:$False
+New-NetIPAddress -IPAddress {{ virgil_ip_dante }} -PrefixLength {{ vlan_subnet_size }} -InterfaceAlias "{{ nic_team_name }}" -DefaultGateway "{{ virgil_vlans_primary | selectattr('physical_ip', 'defined') | selectattr('physical_ip', 'eq', virgil_ip_dante) | map(attribute='gateway') | first }}"
+{% else %}
+# Just use bridge with console address
+New-NetIPAddress -IPAddress {{ virgil_consoles[0].ip }} -PrefixLength {{ subnet_size }} -InterfaceIndex (Get-NetAdapter).InterfaceIndex
+{% endif %}
+
+# Set screen resolution
+Set-DisplayResolution -Width {{ screen_width }} -Height {{ screen_height }} -Force
+
+# Enable Remote Desktop
+Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+
+# Enable Winrm
+# TODO: use domain name from virgil
+$domainName = "sand.wtg.zone"
+$dns = $env:computerName + "." + $domainName
+
+# TODO: remove self-signed certificate and use Wisetech one
+$cert = New-SelfSignedCertificate -DnsName $dns -CertStoreLocation "Cert:\LocalMachine\My"
+$certThumbprint = $cert.Thumbprint
+
+winrm delete winrm/config/Listener?Address=*+Transport=HTTPS
+winrm create winrm/config/Listener?Address=*+Transport=HTTPS "@{Hostname=`"$dns`"; CertificateThumbprint=`"$certThumbprint`"}"
+
+# TODO: remove basic authentication
+winrm set winrm/config/client/auth '@{Basic="true"}'
+winrm set winrm/config/service/auth '@{Basic="true"}'
+
+# Adding firewall exception... (firewall is disabled but still doing this just in case)
+$port=5986
+netsh advfirewall firewall add rule name="Windows Remote Management (HTTPS-In)" dir=in action=allow protocol=TCP localport=$port
+
+{% if links_ports is defined %}
+# Adding scheduled task to autorestart network interfaces at system startup. Needed for simulation only when using fabric
+
+$taskAction = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "D:\wait_for_network.ps1"
+$taskTrigger = New-ScheduledTaskTrigger -AtStartup
+$taskPrincipal = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -LogonType S4U
+
+Register-ScheduledTask WaitForNetwork -Action $taskAction -Trigger $taskTrigger -Principal $taskPrincipal
+
+{% endif %}
+
+Restart-Computer

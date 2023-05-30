@@ -1,0 +1,102 @@
+<domain type='kvm'>
+
+  <name>{{ inventory_hostname }}</name>
+
+  <memory unit='MiB'>{{ ram }}</memory>
+  <vcpu placement='static'>{{ cpu }}</vcpu>
+  <cpu mode="host-model"/>
+  
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+
+  <resource>
+    <partition>/machine</partition>
+  </resource>
+
+  <os>
+    <type arch='x86_64' machine='pc'>hvm</type>
+{% if use_iso %}
+    <!-- qcow2 images were all built with bios (including the ones shipped by Red Hat and Cumulus -->
+    <loader readonly="yes" type="pflash">/usr/share/OVMF/OVMF_CODE.fd</loader>
+{% endif %}
+  </os>
+
+  <devices>
+{% set alphabet = 'abcdefghijklmnopqrstuvwxyz' %}
+{% for drive in (drives | default([{'name':''}])) %}
+    <!--WARNING: do not use unsafe cache in production -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' cache='unsafe'/>
+      <source file='{{ pool }}/{{ inventory_hostname }}{{ drive.name }}.qcow2'/>
+      <target dev='vd{{ alphabet[loop.index - 1] }}' bus='virtio'/>
+      <boot order="{{ loop.index }}"/>
+    </disk>
+{% endfor %}
+
+{% if virgil_os_family == 'windows' %}
+    <graphics type="spice" autoport="yes">
+      <listen type="address"/>
+      <image compression="off"/>
+    </graphics>
+    <video>
+<!-- 64Mb vgamem is reuired for 4k screen resolution -->
+      <model type="qxl" ram="131072" vram="131072" vgamem="65536" heads="1" primary="yes"/>
+    </video>
+{% else %}
+    <graphics type='vnc' port='5910' autoport='yes' listen='127.0.0.1'>
+      <listen type='address' address='127.0.0.1'/>
+    </graphics>
+{% endif %}
+
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+
+<!-- Use bridge only if not simulating fabric -->
+{% if virgil_ip_dante | ipaddr('172.16.0.0/12') or links_ports is not defined %}
+    <interface type='bridge'>
+      <mac address='{{ virgil_mac_oob_dante }}'/>
+      <source bridge='{{ simulation_bridge_name }}'/>
+      <model type='virtio'/>
+    </interface>
+{% endif %}
+
+{% if use_iso or virgil_os_family == 'windows' %}
+    <disk type="file" device="cdrom">
+      <driver name="qemu" type="raw"/>
+      <source file="{{ images_folder }}/iso/{{ inventory_hostname }}.iso"/>
+      <target dev="sdb" bus="sata"/>
+      <readonly/>
+{% if drives is defined %}
+      <boot order="{{ drives | length + 1 }}"/>
+{% endif %} 
+    </disk>
+{% endif %}
+
+    <tpm model="tpm-tis">
+      <backend type="emulator" version="2.0"/>
+    </tpm>
+
+{% if links_ports is defined %}
+{% for name, value in links_ports['links'][inventory_hostname].items() %}
+    <interface type='udp' name='{{ name }}'>
+      <mac address='{{ value["mac"] }}'/>
+      <source address='127.0.0.1' port='{{ value["source"] }}'>
+        <local address='127.0.0.1' port='{{ value["destination"] }}'/>
+      </source>
+      <model type='virtio'/>
+    </interface>
+{% endfor %}
+{% endif %}
+
+{% if 'server_virt_kvm' in virgil_groups %}
+    <filesystem type="mount" accessmode="passthrough">
+      <source dir="/mnt/hostdata"/>
+      <target dir="/hostshare"/>
+    </filesystem>
+{% endif %}
+
+  </devices>
+</domain>

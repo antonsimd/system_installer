@@ -1,0 +1,8 @@
+---
+- name: Upload ISO to Ceph using multipart
+  command: >-
+    s3cmd -P put {{ base_path }}/iso/{{ virgil_hostname }}.iso
+    s3://server-images/{{ publish_iso_name | default(virgil_hostname) }}.iso
+    --multipart-chunk-size-mb={{ s3_mp_chunk_size_mb }}
+  changed_when: true
+  delegate_to: "{{ builder_delegate }}"

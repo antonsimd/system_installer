@@ -1,0 +1,9 @@
+{% if simulation %}
+{%   for name, value in links_ports['links'][inventory_hostname].items() %}
+ACTION=="add", SUBSYSTEM=="net", ATTR{address}=="{{ value['mac'] }}", NAME:="{{ name }}"
+{%   endfor %}
+{% else %}
+{%   for controller in virgil_network_controllers %}
+ACTION=="add", SUBSYSTEM=="net", KERNELS=="{{ controller['bus'] }}", NAME:="{{ controller['iface_name'] }}"
+{%   endfor %}
+{% endif %}

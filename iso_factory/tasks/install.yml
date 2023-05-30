@@ -1,0 +1,6 @@
+---
+- name: "Include {{ target_os }} specific variables file"
+  include_vars: "main_{{ target_os | lower }}.yml"
+
+- name: "Include {{ target_os }} specific tasks file"
+  include_tasks: "install_{{ target_os | lower }}.yml"

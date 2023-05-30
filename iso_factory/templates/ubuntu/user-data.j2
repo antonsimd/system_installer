@@ -1,0 +1,104 @@
+#cloud-config
+autoinstall:
+  version: 1
+  network:
+  {{ network_template | to_nice_yaml | trim | indent(width=4, first=true) }}
+  identity:
+    hostname: ubuntu-server
+    # password is 'ubuntu' - required for first install
+    password: "$6$exDY1mhS4KUYCE/2$zmn9ToZwTKLhCw.b4/b.ZRTIZM30JZ4QrOQ2aOXJ8yk96xpcCof0kxKwuX1kqLG/ygbJ1f8wxED22bTL4F46P0"
+    username: dante
+  ssh:
+    install-server: yes
+{% set ssh_keys = hostvars[groups['mgmt'][0]]['virgil_ssh_authorized_keys'].splitlines() %}
+    authorized-keys:
+{% for key in ssh_keys %}
+{% if 'ssh' in key and '#' not in key %}
+      - {{ key }}
+{% endif %}
+{% endfor %}
+    allow-pw: no
+  storage:
+{{ storage_template | to_nice_yaml | trim | indent(width=4, first=true) }}
+  early-commands:
+    - rm /usr/lib/udev/rules.d/58-scsi-sg3_symlink.rules
+  late-commands:
+    - mkdir -p /target/opt/install/drivers
+    - cp -r /media/cdrom/drivers/* /target/opt/install/drivers
+    - mkdir /target/opt/install/drivers/mellanox
+    - mkdir /target/opt/install/apt
+    - tar -xvf /target/opt/install/drivers/mellanox_ubuntu.tgz --strip-components=2 -C /target/opt/install/drivers/mellanox
+    - tar -xvf /target/opt/install/drivers/apt.tar.gz -C /target/opt/install/apt
+    # Ubuntu 21.04 suffering a bug which confuses '%3a' with ':' symbols in file names. These symbols are the same but
+    # we need to help Ubuntu 21 to recognise them correctly. There is no harm of doing this for all ubuntu anyway.
+    - chroot /target /bin/bash -c 'for f in /opt/install/apt/packages/*; do cp "$f" "$(echo "$f" | sed s/%3a/:/)"; done'
+{# Delete default udev rules and inject rules from virgil #}
+    - rm -rf /target/etc/udev/rules.d/*
+    - cp -r /media/cdrom/sysconfig/70-persistent-net.rules /target/etc/udev/rules.d/
+{% if simulation %}
+{# Inject proxy setting for the simulation #}
+    - cp -r /media/cdrom/sysconfig/environment /target/etc/environment
+{% endif %}
+    - chroot /target /bin/bash -c "echo 'dante ALL=(ALL:ALL) NOPASSWD:ALL' | tee /etc/sudoers.d/dante"
+    - chroot /target /bin/bash -c "chmod 0440 /etc/sudoers.d/dante"
+    - chroot /target /bin/bash -c "echo 'deb [trusted=yes] file:/opt/install/apt ./' | tee /etc/apt/sources.list"
+    - chroot /target /bin/bash -c "apt-get update"
+{# Disable mellanox drivers installation in simulation #}
+{% if not simulation %}
+    - curtin in-target --target=/target -- /opt/install/drivers/mellanox/install --force --vma
+{% endif %}
+    - mount -t proc proc /target/proc
+    - mount -o bind /dev /target/dev
+    - mount -o bind /sys /target/sys
+    - chroot /target /bin/bash -c "sudo apt-get --with-new-pkgs upgrade -y"
+{% if virgil_layer3 %}
+    - chroot /target /bin/bash -c "apt-get install -y frr"
+{% for config in frr_config %}
+    - cp -r /media/cdrom/sysconfig/{{ config.file_name }} /target/etc/frr
+{% endfor %}
+{% endif %}
+{# Disable atp installtion simulation until we fix the simulation_setup role #}
+{% if not simulation %}
+    - chroot /target /bin/bash -c "apt-get install -y mdatp"
+{% endif %}
+{# If needed, the following commands can be placed in a .sh file inside the iso and executed in a chroot'ed bash #}
+{% for dmcrypt in ( virgil_storage_os | selectattr("kind", "equalto", "luks") | selectattr("unlock_method", "equalto", "key file") ) %}
+    - chroot /target /bin/bash -c "dd if=/dev/urandom bs=32 count=64 of=/root/random_key_{{ dmcrypt.name }}"
+    - chroot /target /bin/bash -c "echo '{{ dmcrypt.key | default(virgil_hostname, true) }}' | cryptsetup luksAddKey /dev/$(lsblk --output NAME | grep -B 1 {{ dmcrypt.name }} | head -n 1 | sed 's/[^a-zA-Z0-9]//g') /root/random_key_{{ dmcrypt.name }}"
+    - chroot /target /bin/bash -c "sed -i -e '/{{ dmcrypt.name }}/s/none/\/root\/random_key_{{ dmcrypt.name }}/' /etc/crypttab"
+{% endfor %}
+{% for dmcrypt in ( virgil_storage_os | selectattr("kind", "equalto", "luks") | selectattr("unlock_method", "equalto", "clevis") ) %}
+{% if loop.first %}
+    - chroot /target /bin/bash -c "apt-get install -y clevis-luks clevis-tpm2 clevis-dracut"
+{#
+Resets lockout counter, sets max auth fail to 31 tries, lockout interval to 10 mins and lockout recovery to 1 day
+
+When the reboot or shutdown process is un-graceful, it will increment the lockout counter by 1
+On rare occasions, due to the pre-set max auth, and lockout interval settings, after a few reboots, will lock out the user
+This command will be executed after 1 reboot during the installation process so we can take the chance to initialize the TPM settings and reset the lockout counter
+#}
+    - chroot /target /bin/bash -c "tpm2_dictionarylockout -s -c -n 31 -t 600 -l 86400"
+{% endif %}
+    - chroot /target /bin/bash -c "echo '{{ dmcrypt.key | default(virgil_hostname, true) }}' | clevis luks bind -d /dev/$(lsblk --output NAME | grep -B 1 {{ dmcrypt.name }} | head -n 1 | sed 's/[^a-zA-Z0-9]//g') tpm2 '{}'"
+{% if loop.last %}
+    - chroot /target /bin/bash -c "systemctl enable clevis-luks-askpass.path"
+    - chroot /target /bin/bash -c "apt-get install -y dracut"
+    - chroot /target /bin/bash -c "dracut -f"
+    - chroot /target /bin/bash -c "sed -i '/GRUB_CMDLINE_LINUX_DEFAULT=\"\"/c\GRUB_CMDLINE_LINUX_DEFAULT=\"rd.neednet=0\"' /etc/default/grub"
+    - chroot /target /bin/bash -c "update-grub"
+{% endif %}
+{% endfor %}
+{% if simulation %}
+    - echo /usr/lib/x86_64-linux-gnu/libeatmydata.so >> /target/etc/ld.so.preload
+{% endif %}
+{# runcmd will be run after all normal services have started and will only run on first boot #}
+  user-data:
+    runcmd:
+{% if not simulation %}
+      - echo "Calling Styx for a Dante run..."
+      - >-
+        curl -f --retry 999 -H "Content-Type: application/json" -d '"First Boot Server Dante Run"' {{ styx_url }}
+{% else %}
+{# Nothing to do here, but let's put in a dummy command so the structure is the same as production #}
+      - echo "Not calling Styx in simulation"
+{% endif %}

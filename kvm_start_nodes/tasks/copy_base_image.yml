@@ -1,0 +1,8 @@
+---
+# Do not use ansible copy since it uses temp directory as intermediate storage
+# This slows down copy process a lot.
+- name: "Copy base image"
+  command: "dd if={{ image }} of={{ pool }}/{{ inventory_hostname }}.qcow2 bs=1M conv=sparse"
+  args:
+    creates: "{{ pool }}/{{ inventory_hostname }}.qcow2"
+  delegate_to: "{{ groups['hypervisor'][0] }}"

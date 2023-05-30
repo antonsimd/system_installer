@@ -1,0 +1,10 @@
+$network_ready = $False
+while (-not $network_ready) {
+    $network_ready = (Test-Connection {{ hostvars[groups['mgmt'][0]]['virgil_ip_primary'] }} -Quiet -Count 1) 
+    if (-not $network_ready) {
+        Write-Output 'Waiting for fabric...'
+        Restart-NetAdapter -Name 'Ethernet'
+        Restart-NetAdapter -Name 'Ethernet 2'
+        Start-Sleep -Seconds 10        
+    }
+}

@@ -1,0 +1,45 @@
+{% set count = namespace(value=10000) %}
+{% set connections = {} %}
+{% set link_ports = {} %}
+{
+  "links": {
+{% for node in virgil_all_nodes.values() if node.virgil_local %}
+    "{{ node['virgil_hostname'] }}": {
+{%   for link in node['virgil_ports_primary'] %}
+{%     if link['mode'] in ['BGPUnnumbered', 'bonded', 'access', 'trunk'] %}
+{%       if 'peer_node_hostname' in link %}
+{%         set source = [node['virgil_hostname'], ':', link['port']] | join('') %}
+{%         set destination = [link['peer_node_hostname'], ':', link['peer_port']] | join('') %}
+      "{{ link['port'] }}": {
+{%         if destination not in connections or connections[destination] != source %}
+{%           set count.value = count.value + 1 %}
+{%           set p = link_ports.__setitem__(source, count.value) %}
+{%           set x = connections.__setitem__(source, destination) %}
+        "source": "{{ link_ports[source] }}",
+        "destination": "{{ link_ports[source] + 1000 }}",
+{%         else %}
+{%           set x = connections.__setitem__(source, destination) %}
+        "source": "{{ link_ports[destination] + 1000 }}",
+        "destination": "{{ link_ports[destination] }}",
+{%         endif %}
+        "mac": "{{ '52:54:00' | random_mac(seed=node['virgil_hostname'] + link['port']) }}"
+      },
+{%       endif %}
+{%     endif %}
+{%   endfor %}
+{%   for bond_ports in node['virgil_bond_ports_primary'] %}
+{%     for port in bond_ports['ports'] %}
+{%       if port not in (node['virgil_ports_primary'] | selectattr('peer_node_hostname', 'defined') | selectattr('peer_node_dante', 'equalto', true) | map(attribute='port')) %}
+{%         set count.value = count.value + 1 %}
+     "{{ port }}": {
+        "source": "{{ count.value }}",
+        "destination": "{{ count.value + 5000 }}",
+        "mac": "{{ '52:54:00' | random_mac(seed=node['virgil_hostname'] + port) }}"
+     },
+{%       endif %}
+{%     endfor %}
+{%   endfor %}
+    },
+{% endfor %}
+  }
+}

@@ -1,0 +1,75 @@
+---
+# Start mgmt nodes with libvirt
+
+- name: Create pool directory if it does not exist
+  file:
+    path: "{{ pool }}/{{ inventory_hostname }}"
+    state: directory
+    recurse: yes
+    mode: a=rwx
+  become: true
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+# TODO: Remove when  proper panos support added
+- name: Treat panos as linux
+  set_fact:
+    virgil_os_family: linux
+  when: virgil_os_family == 'panos'
+
+- name: Generate mac address if not exist
+  include_tasks: generate_mac_for_vm.yml
+  when: virgil_mac_oob_dante == '...'
+
+- name: Generate machine links
+  include_tasks: generate_links.yml
+
+- name: Create a directory for each node
+  # Create the directory for each node as well as the udev/rules.d subdirectory
+  file:
+    path: "{{ pool }}/{{ inventory_hostname }}/udev/rules.d"
+    state: directory
+    mode: a=rwx
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  when: virgil_os_family == 'linux'
+
+- name: Enumerate drives to simulate
+  set_fact:
+    drives: "{{ drives | default([]) + item.raid | selectattr('name', 'defined') }}"
+  with_items: "{{ virgil_storage_controllers }}"
+  when: use_iso
+
+- name: Create disk for iso based vm
+  command: qemu-img create -f qcow2 {{ pool }}/{{ inventory_hostname }}{{ item.name }}.qcow2 {{ item.size_mi }}M
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  become: yes
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: disc_create_result
+  retries: 20
+  until: not disc_create_result.failed
+  with_items: "{{ drives }}"
+  when: use_iso
+
+- name: Create vm from image
+  include_tasks: create_from_image_{{ virgil_os_family }}.yml
+  when: not use_iso
+
+- name: "Generate vm xml file"
+  template:
+    src: "vm.xml.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/{{ inventory_hostname }}.xml"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: "Start nodes"
+  command: >-
+    timeout -k30s 5m
+    virsh create {{ pool }}/{{ inventory_hostname }}/{{ inventory_hostname }}.xml
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  become: yes
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  throttle: 1
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed

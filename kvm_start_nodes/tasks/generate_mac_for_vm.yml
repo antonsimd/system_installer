@@ -1,0 +1,4 @@
+---
+- name: Generate mac address if not exist
+  set_fact:
+    virgil_mac_oob_dante: "{{ '52:54:00' | random_mac(seed=virgil_hostname) }}"

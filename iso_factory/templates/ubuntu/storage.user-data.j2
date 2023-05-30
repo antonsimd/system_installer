@@ -1,0 +1,62 @@
+config:
+{# Identify Disks #}
+{% for disk in virgil_storage_controllers | map(attribute='raid') | flatten %}
+  - id: {{ disk.name }}
+    type: disk
+    grub_device: false
+    preserve: false
+    ptable: gpt
+    wipe: superblock
+{% if disk.selectors is defined and disk.selectors %}
+{% for selector_key, selector_value in disk.selectors.items() %}
+{% if loop.first %}
+    match:
+{% endif %}
+      {{ selector_key }}: {{ selector_value }}
+{% endfor %}
+
+{% endif %}
+{% endfor %}
+
+{# Create Partitions #}
+{% for block in virgil_storage_os %}
+  - id: {{ block.name }}
+    preserve: false
+{% if block.kind == 'luks' %}
+    type: dm_crypt
+    volume: {{ block.upon_name }}
+    key: {{ block.key | default(virgil_hostname, true) }}
+{% elif block.kind == 'lvm' %}
+    type: lvm_volgroup
+    devices: {{ block.upon_name }}
+    name: {{ block.name }}
+{% elif block.kind == 'partition' %}
+    type: {{ 'lvm_' if block.upon_kind == 'lvm' else '' }}partition
+    {{ 'volgroup' if block.upon_kind == 'lvm' else 'device' }}: {{ block.upon_name }}
+    size: {{ '-1' if block.size == 'fill' else block.size_bytes }}
+    wipe: superblock
+{% if block.upon_kind == 'hardware_raid' %}
+    flag: {{ 'boot' if block.boot else '' }}
+    grub_device: {{ block.boot }}
+{% elif block.upon_kind == 'lvm' %}
+    name: {{ block.name }}
+{% endif %}
+{% endif %}
+
+{# Format and mount Partitions #}
+{% if block.fstype is defined and block.fstype %}
+  - id: fmt-{{ block.name }}
+    fstype: {{ block.fstype }}
+    preserve: false
+    type: format
+    volume: {{ block.name }}
+
+{% if block.mount is defined and block.mount %}
+  - id: mount-{{ block.name }}
+    type: mount
+    device: fmt-{{ block.name }}
+    path: {{ block.mount }}
+
+{% endif %}
+{% endif %}
+{% endfor %}

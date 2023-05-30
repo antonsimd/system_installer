@@ -1,0 +1,3 @@
+{% for name, value in links_ports['links'][inventory_hostname].items() %}
+ACTION=="add", SUBSYSTEM=="net", ATTR{address}=="{{ value['mac'] }}", NAME="{{ name }}", SUBSYSTEMS=="pci"
+{% endfor %}

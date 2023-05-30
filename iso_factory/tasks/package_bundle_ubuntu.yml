@@ -1,0 +1,64 @@
+---
+- name: Get list of all possible upgrades for this system
+  command: apt -s upgrade
+  register: result
+  changed_when: false
+
+# Output of the above command consists of 2 large blocks.
+# First it shows all upgradable packages and the ones which will be installed automatically
+# Large list follows with two entries for each package starting with "Inst" and "Configure"
+# Package name and version as well as some more info follows separated with space.
+# There is no way to output this list in json or yaml format so we need to parse strings.
+# Example:
+# Inst cloud-init [20.4.1-0ubuntu1~20.04.1] (21.2-3-g899bfaa9-0ubuntu2~20.04.1 Ubuntu:20.04/focal-updates [all])
+# Conf motd-news-config (11ubuntu5.4 Ubuntu:20.04/focal-updates [all])
+- name: Calculate upgrades list
+  set_fact:
+    upgrades_list: "{{ upgrades_list | default([]) + [item.split(' ')[1]] }}"
+  when: item is match("Inst *")
+  with_items: "{{ result.stdout_lines | list }}"
+
+- name: Calculate all dependencies
+  command: >-
+    apt-cache depends {{ iso_packages | join(' ') }} --recurse --no-recommends
+    --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances
+  register: apt_cache_output
+  changed_when: false
+
+- name: Set fact - Complete package list
+  set_fact:
+    complete_pkg_list: >-
+      {{ (apt_cache_output.stdout_lines |
+      select('match', '^\w') + upgrades_list) |
+      sort }}
+    apt_repo_path: "{{ base_path }}/iso/apt/"
+
+- name: Creates directories for packages
+  file:
+    path: "{{ apt_repo_path }}/packages"
+    state: directory
+    mode: u=rwx,go=rx
+
+- name: Download packages with all dependencies
+  command: >-
+    apt download {{ complete_pkg_list | join(' ') }}
+  args:
+    chdir: "{{ apt_repo_path }}/packages"
+  register: download_output
+  changed_when: '"Fetched" in download_output.stdout'
+
+- name: Create Packages.gz file for downloaded archives
+  shell: |
+    set euxo pipefail
+    dpkg-scanpackages packages | gzip -9c > Packages.gz
+  args:
+    chdir: "{{ apt_repo_path }}"
+  changed_when: true
+
+- name: Archive packages and lists
+  archive:
+    path: "{{ apt_repo_path }}*"
+    dest: "{{ base_path }}/iso/apt.tar.gz"
+    format: gz
+    force_archive: true
+    mode: u=rwx,go=rx

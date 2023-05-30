@@ -1,0 +1,57 @@
+---
+#- name: Extract grub.cfg
+  command: "7z e {{ iso_path | default(base_path) }}/{{ iso }} -o{{ working_folder.path }}/boot/grub boot/grub/grub.cfg"
+  changed_when: true
+  delegate_to: "{{ builder_delegate }}"
+
+- include_role:
+    name: network_interfaces
+    tasks_from: generate_network_file_to_var.yml
+  when: render_network | default('yes')
+
+#- name: Populate user-data
+  vars:
+    storage_template: "{{ lookup('template', 'ubuntu/storage.user-data.j2') | from_yaml }}"
+  template:
+    src: "ubuntu/{{ user_data }}"
+    dest: "{{ working_folder.path }}/nocloud/user-data"
+    mode: u=rw,go=r
+  delegate_to: "{{ builder_delegate }}"
+
+#- name: Patch grub to enable autoinstall
+  replace:
+    path: "{{ working_folder.path }}/boot/grub/grub.cfg"
+    regexp: '---'
+    replace: 'fsck.mode=skip autoinstall ds=nocloud\;s=/cdrom/nocloud/ ---'
+  delegate_to: "{{ builder_delegate }}"
+
+#- name: Create empty meta-data file
+  copy:
+    content: ""
+    dest: "{{ working_folder.path }}/nocloud/meta-data"
+    mode: u=rw,go=r
+  delegate_to: "{{ builder_delegate }}"
+
+- name: Decrease timeout in grub to 3 seconds
+  replace:
+    path: "{{ working_folder.path }}/boot/grub/grub.cfg"
+    regexp: '^.*set timeout.*$'
+    replace: 'set timeout=3'
+  delegate_to: "{{ builder_delegate }}"
+
+- name: Copy packages to drivers directory
+  command: "dd if={{ base_path }}/iso/apt.tar.gz of={{ working_folder.path }}/drivers/apt.tar.gz bs=1M conv=sparse"
+  changed_when: true
+  delegate_to: "{{ builder_delegate }}"
+  when: add_apt_packages | default('yes')
+
+#- name: Patch iso with autoinstall and new files
+  command: >
+#    xorriso -boot_image "any" "keep" -dev {{ base_path }}/iso/{{ virgil_hostname }}.iso
+#    -map {{ working_folder.path }}/nocloud nocloud
+    -map {{ working_folder.path }}/drivers drivers
+    -map {{ working_folder.path }}/sysconfig sysconfig
+#    -map {{ working_folder.path }}/boot/grub/grub.cfg boot/grub/grub.cfg
+#    -commit -eject all
+  changed_when: true
+  delegate_to: "{{ builder_delegate }}"

@@ -1,0 +1,9 @@
+---
+- name: "Generate json variable with links port bindings"
+  run_once: true
+  set_fact:
+    links_ports: "{{ lookup('template', 'links.j2') }}"
+  when:
+  - links_ports is not defined
+  # no need to calculate links if mgmt nodes are not simulated
+  - "'mgmt' in ansible_limit"

@@ -1,0 +1,44 @@
+---
+base_path: "/mnt/storage"
+iso: "ubuntu.iso"
+user_data: "user-data.j2"
+styx_url: >-
+  http://{{ virgil_mgmt_nodes | selectattr('aliases', 'contains', 'styx') |
+  map(attribute='ip_primary') | first }}:7899/configure-me
+builder_packages:
+- p7zip-full
+- xorriso
+- isolinux
+- dpkg-dev
+- s3cmd
+iso_packages:
+- clevis-luks
+- clevis-tpm2
+- clevis-dracut
+- dracut
+- libnl-3-dev
+- libnl-route-3-200
+- dkms
+- bison
+- gfortran
+- tcl
+- autotools-dev
+- tk
+- libgfortran4
+- make
+- gcc
+- automake
+- debhelper
+- autoconf
+- flex
+- m4
+- chrpath
+- quilt
+- libltdl-dev
+- dpatch
+- graphviz
+- swig
+- pkg-config
+- libnl-route-3-dev
+- frr
+- mdatp

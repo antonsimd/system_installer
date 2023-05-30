@@ -1,0 +1,197 @@
+---
+- name: Copy base image
+  include_tasks: copy_base_image.yml
+
+- name: "Generate configure user script"
+  template:
+    src: "configure_user.sh.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/configure_user.sh"
+    mode: u=rwx,go=rx
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: "Setup user"
+  command: >
+    virt-customize {{ '--selinux-relabel' if virgil_os_variant == 'rhel' else '' }}
+    -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    --run "{{ pool }}/{{ inventory_hostname }}/configure_user.sh"
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Generate proxy settings"
+  template:
+    src: "environment.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/environment"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: "Inject proxy settings"
+  command: >
+    virt-copy-in -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    {{ pool }}/{{ inventory_hostname }}/environment /etc/
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Generate netplan for each Ubuntu node"
+  template:
+    src: "00-installer-config.yaml.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/00-installer-config.yaml"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  when: virgil_os_variant == 'ubuntu'
+
+- name: "Inject netplan to Ubuntu nodes"
+  command: >
+    virt-copy-in -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    {{ pool }}/{{ inventory_hostname }}/00-installer-config.yaml /etc/netplan/
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  when: virgil_os_variant == 'ubuntu'
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Delete RHEL default network configuration"
+  command: >
+    virt-customize {{ '--selinux-relabel' if virgil_os_variant == 'rhel' else '' }}
+    -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    --delete /etc/sysconfig/network-scripts/*
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  when: virgil_os_variant == 'rhel'
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Generate ifcfg for each Red Hat node"
+  template:
+    src: "ifcfg-oob.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/ifcfg-{{ virgil_port_oob_dante }}"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  when: virgil_os_variant == 'rhel'
+
+- name: "Inject ifcfg to Red Hat nodes"
+  command: >
+    virt-copy-in -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    {{ pool }}/{{ inventory_hostname }}/ifcfg-{{ virgil_port_oob_dante }}
+    /etc/sysconfig/network-scripts/
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  when: virgil_os_variant == 'rhel'
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Delete default udev rules"
+  command: >
+    virt-customize {{ '--selinux-relabel' if virgil_os_variant == 'rhel' else '' }}
+    -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    --delete /etc/udev/rules.d/*
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Generate oob network naming rules"
+  template:
+    src: "60-oob-dante.rules.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/60-oob-dante.rules"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  when: virgil_os_variant in ['ubuntu', 'rhel']
+
+- name: "Inject oob network naming rules"
+  command: >
+    virt-copy-in -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    {{ pool }}/{{ inventory_hostname }}/60-oob-dante.rules /etc/udev/rules.d/
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  when: virgil_os_variant in ['ubuntu', 'rhel']
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Disable unattended upgrades on Ubuntu nodes"
+  command: >
+    virt-customize {{ '--selinux-relabel' if virgil_os_variant == 'rhel' else '' }}
+    -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    --uninstall unattended-upgrades
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  when: virgil_os_variant == 'ubuntu'
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: "Generate ports mapping for each node"
+  template:
+    src: "70-persistent-net.rules.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/udev/rules.d/70-persistent-net.rules"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: "Disabling default remap on Cumulus VX."
+  command: >
+    virt-customize {{ '--selinux-relabel' if virgil_os_variant == 'rhel' else '' }}
+    -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    --delete /etc/hw_init.d/S10rename_eth_swp.*
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  when: virgil_os_variant == 'cumulus'
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed
+
+- name: Create hosts file
+  copy:
+    content: "127.0.1.1 {{ virgil_internal_fqdn }} {{ virgil_hostname }} localhost"
+    dest: "{{ pool }}/{{ inventory_hostname }}/hosts"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: Create hostname file
+  copy:
+    content: "{{ virgil_hostname }}"
+    dest: "{{ pool }}/{{ inventory_hostname }}/hostname"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: "Inject system configuration files"
+  command: >
+    virt-copy-in -a {{ pool }}/{{ inventory_hostname }}.qcow2
+    {{ pool }}/{{ inventory_hostname }}/hosts
+    {{ pool }}/{{ inventory_hostname }}/hostname
+    {{ pool }}/{{ inventory_hostname }}/udev
+    /etc/
+  become: yes
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  changed_when: true
+  # Fails when different process tries to do the same operations at the exact same moment
+  register: kvm_result
+  retries: 20
+  until: not kvm_result.failed

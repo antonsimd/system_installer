@@ -1,0 +1,6 @@
+---
+- name: Install required packages on builder machine
+  apt:
+    name: "{{ builder_packages }}"
+    update_cache: yes
+  become: yes

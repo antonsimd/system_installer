@@ -1,0 +1,57 @@
+---
+- name: Copy base image
+  include_tasks: copy_base_image.yml
+
+- name: "Generate Windows files for unattended startup"
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ pool }}/{{ inventory_hostname }}/{{ item }}"
+    mode: u=rw,go=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+  with_items:
+  - Unattend.xml
+  - network_setup_win.ps1
+  - wait_for_network.ps1
+
+- name: Copy red Hat certificate file to working folder
+  copy:
+    src: "{{ red_hat_cert_filename }}"
+    dest: "{{ pool }}/{{ inventory_hostname }}/{{ red_hat_cert_filename }}"
+    mode: a=r
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: Download Windows client spice
+  get_url:
+    url: "https://www.spice-space.org/download/windows/spice-guest-tools/{{ win_spice_filename }}"
+    dest: "{{ pool }}/{{ inventory_hostname }}/{{ win_spice_filename }}"
+    mode: a=rx
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: Create iso directory if it does not exist
+  file:
+    path: "{{ images_folder }}/iso"
+    state: directory
+    recurse: yes
+    mode: a=rwx
+  become: true
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: Make sure iso doesn't exist because xorriso may glitch on ovewrite
+  file:
+    state: absent
+    path: "{{ images_folder }}/iso/{{ inventory_hostname }}.iso"
+  delegate_to: "{{ groups['hypervisor'][0] }}"
+
+- name: Generate ISO with Unattend.xml in root folder
+  command: >
+    xorriso -outdev {{ images_folder }}/iso/{{ inventory_hostname }}.iso
+    -blank as_needed
+    -joliet on
+    -map {{ pool }}/{{ inventory_hostname }}/Unattend.xml Unattend.xml
+    -map {{ pool }}/{{ inventory_hostname }}/network_setup_win.ps1 network_setup_win.ps1
+    -map {{ pool }}/{{ inventory_hostname }}/wait_for_network.ps1 wait_for_network.ps1
+    -map {{ pool }}/{{ inventory_hostname }}/{{ win_spice_filename }} {{ win_spice_filename }}
+    -map {{ pool }}/{{ inventory_hostname }}/{{ red_hat_cert_filename }} {{ red_hat_cert_filename }}
+    -volid "test"
+  changed_when: true
+  delegate_to: "{{ groups['hypervisor'][0] }}"

@@ -1,0 +1,97 @@
+---
+- name: "Include {{ target_os }} specific variables file"
+  include_vars: "main_{{ target_os | lower }}.yml"
+
+- name: Make sure working directories are empty
+  file:
+    state: absent
+    path: "{{ base_path }}/iso/{{ virgil_hostname }}/"
+  delegate_to: "{{ builder_delegate }}"
+
+#- name: Create directory for ISO setup
+  file:
+    path: "{{ base_path }}/iso/{{ virgil_hostname }}/"
+    state: directory
+    mode: u=rwx,go=rx
+  register: working_folder
+  delegate_to: "{{ builder_delegate }}"
+
+#- name: Creates supplementary directories for ISO customisation
+  file:
+    path: "{{ working_folder.path }}/{{ item }}"
+    state: directory
+    mode: u=rwx,go=rx
+    recurse: yes
+  with_items:
+#  - nocloud
+  - drivers
+  - sysconfig/network-scripts
+  - kickstart
+  delegate_to: "{{ builder_delegate }}"
+
+- include_role:
+    name: network_routing
+    tasks_from: render_frr_config_to_vars.yml
+  when:
+  - render_network | default('yes')
+  - virgil_layer3
+
+- name: Copy frr config files to iso
+  copy:
+    content: "{{ item.content }}"
+    dest: "{{ working_folder.path }}/sysconfig/{{ item.file_name }}"
+    mode: a=r
+  with_items: "{{ frr_config }}"
+  delegate_to: "{{ builder_delegate }}"
+  when:
+  - render_network | default('yes')
+  - virgil_layer3
+
+- name: Add mellanox drivers to the ISO
+  ansible.builtin.copy:
+    src: "{{ base_path }}/mellanox_{{ target_os | lower }}.tgz"
+    remote_src: yes
+    dest: "{{ working_folder.path }}/drivers/"
+  delegate_to: "{{ builder_delegate }}"
+  when: add_drivers | default('yes')
+
+- include_role:
+    name: kvm_start_nodes
+    tasks_from: generate_links.yml
+  when:
+  - simulation
+  - render_network | default('yes')
+
+- name: Generate proxy settings for simulation
+  copy:
+    content: |
+      http_proxy="http://{{ virgil_mgmt_nodes | map(attribute='ip_primary') | first }}:3128"
+      https_proxy="http://{{ virgil_mgmt_nodes | map(attribute='ip_primary') | first }}:3128"
+    dest: "{{ working_folder.path }}/sysconfig/environment"
+    mode: u=rw,go=r
+  delegate_to: "{{ builder_delegate }}"
+  when:
+  - simulation
+  - use_proxy | default('yes')
+
+- name: "Create udev rules"
+  template:
+    src: 70-persistent-net.rules.j2
+    dest: "{{ working_folder.path }}/sysconfig/70-persistent-net.rules"
+    mode: u=rw,go=r
+  delegate_to: "{{ builder_delegate }}"
+  when: configure_udev | default('yes')
+
+#- name: "Copy base iso"
+  command: >-
+    dd if={{ iso_path | default(base_path) }}/{{ iso }}
+    of={{ base_path }}/iso/{{ virgil_hostname }}.iso bs=1M conv=sparse
+  changed_when: true
+  delegate_to: "{{ builder_delegate }}"
+
+#- name: "Include {{ target_os }} specific tasks file"
+  include_tasks: "build_{{ target_os | lower }}_iso.yml"
+
+- name: "Include publish tasks for {{ publish_to }}"
+  include_tasks: "publish_to_{{ publish_to }}.yml"
+  when: publish_to is defined

@@ -1,0 +1,5 @@
+---
+- name: Build initial iso files
+  hosts: dhcp1
+  roles:
+   - dhcp_setup

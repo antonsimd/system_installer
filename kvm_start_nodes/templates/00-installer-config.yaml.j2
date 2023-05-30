@@ -1,0 +1,10 @@
+network:
+  ethernets:
+    {{ virgil_port_oob_dante }}:
+      dhcp4: false
+      critical: true
+  bridges:
+    oob:
+      interfaces: [{{ virgil_port_oob_dante }}]
+      addresses: [{{ virgil_ip_oob_dante }}/{{ subnet_size }}]
+  version: 2

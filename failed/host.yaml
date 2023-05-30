@@ -1,0 +1,30 @@
+---
+all:
+  children:
+    dhcp1:
+      ansible_host: 172.10.0.1
+      mac_address: 52:54:00:da:b0:21
+    
+    dns1:
+      hosts:
+        172.10.0.2
+      vars:
+        mac_accress: 52:54:00:ba:dc:c0
+    
+    haproxy:
+      hosts:
+        172.10.0.50
+      vars:
+        mac_address: 52:54:00:b7:17:1f
+
+    website1:
+      hosts:
+        172.10.0.51
+      vars:
+        mac_address: 52:54:00:06:f9:6c
+
+    website2:
+      hosts:
+        172.10.0.52
+      vars:
+        mac_address: 52:54:00:ad:c7:7f

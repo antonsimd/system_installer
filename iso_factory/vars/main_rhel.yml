@@ -1,0 +1,33 @@
+---
+base_path: "/mnt/storage"
+iso: "rhel.iso"
+styx_url: >-
+  http://{{ virgil_mgmt_nodes | selectattr('aliases', 'contains', 'styx') |
+  map(attribute='ip_primary') | first }}:7899/configure-me
+# TODO: some packages in Ubuntu are unavailable in RHEL disc repository.
+# Need to install them by other ways.
+iso_packages:
+  - clevis
+  - clevis-systemd
+  - clevis-luks
+  - clevis-dracut
+  - tpm2-abrmd
+  - tpm2-tools
+  - binutils
+  - network-scripts
+  - python36
+  - bison
+  - tcl
+  - tk
+  - make
+  - gcc
+  - automake
+  - autoconf
+  - flex
+  - m4
+  - graphviz
+  - swig
+  - frr
+  - libnl3-devel
+  - chrpath
+  - libtool-ltdl-devel
